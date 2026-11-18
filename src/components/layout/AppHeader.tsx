@@ -1,0 +1,193 @@
+"use client";
+import { useState } from "react";
+import { Bell, ChevronRight, Menu, Users } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { MobileNav } from "@/components/layout/AppSidebar";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useUser } from "@/lib/auth-context";
+import { useStore } from "@/lib/store";
+import type { PresenceUser } from "@/lib/store";
+
+const routeLabels: Record<string, string> = {
+  "/dashboard":          "Dashboard",
+  "/shipments":          "Shipments",
+  "/create-shipment":    "Create Shipment",
+  "/your-orders":        "Your Orders",
+  "/route-intelligence": "Route Intelligence",
+  "/analytics":          "Analytics",
+  "/settings":           "Settings",
+  "/routes":             "Route Comparison",
+  "/demo":               "Demo",
+  "/company/register":   "Company Registration",
+  "/company/documents":  "Document Upload",
+  "/company/pending":    "Verification Pending",
+  "/company/rejected":   "Application Status",
+  "/admin/companies":    "Admin - Companies",
+};
+
+export function AppHeader() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { user } = useUser();
+  const { presence } = useStore();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const segments = pathname.split("/").filter(Boolean);
+
+  const onlineUsers = Object.values(presence).filter(
+    (p): p is PresenceUser => p.status === "online",
+  );
+  const onlineCount = onlineUsers.length;
+
+  const pageTitle = (() => {
+    if (routeLabels[pathname]) return routeLabels[pathname];
+    if (segments[0] === "shipments" && segments.length >= 2) return "Shipment Detail";
+    if (segments[0] === "workforce" && segments[1] === "drivers"  && segments.length >= 3) return "Driver Profile";
+    if (segments[0] === "workforce" && segments[1] === "vehicles" && segments.length >= 3) return "Vehicle Profile";
+    if (segments[0] === "admin"     && segments[1] === "company"  && segments.length >= 3) return "Company Detail";
+    const last = segments[segments.length - 1] ?? "Dashboard";
+    return last.charAt(0).toUpperCase() + last.slice(1).replace(/-/g, " ");
+  })();
+
+  const handleSignOut = async () => {
+    await signOut(auth);
+    document.cookie = "sr_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    router.push("/auth/signin");
+  };
+
+  const displayName = user?.displayName ?? user?.email ?? "User";
+  const initials =
+    displayName
+      .split(/[\s@.]+/)
+      .slice(0, 2)
+      .map((s: string) => s[0]?.toUpperCase() ?? "")
+      .join("") || "U";
+
+  return (
+    <>
+      <MobileNav open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+
+      <header className="h-14 flex items-center gap-3 sm:gap-4 px-4 sm:px-6 lg:px-8 border-b border-border bg-background sticky top-0 z-30">
+        {/* Mobile hamburger */}
+        <button
+          className="md:hidden text-muted-foreground hover:text-foreground p-1.5 -ml-1 rounded-md hover:bg-accent transition-colors"
+          onClick={() => setMobileNavOpen(true)}
+          aria-label="Open navigation"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        {/* Breadcrumb */}
+        <div className="flex items-center gap-2 text-sm min-w-0">
+          <span className="text-muted-foreground hidden sm:block shrink-0">SentinelRoute</span>
+          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 hidden sm:block shrink-0" />
+          <span className="font-semibold text-foreground truncate">{pageTitle}</span>
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Live presence indicator */}
+        <Tooltip>
+          <TooltipTrigger className="hidden md:flex items-center gap-2 h-9 px-3 rounded-lg border border-border bg-muted/20 text-muted-foreground text-sm hover:bg-muted/40 transition-colors">
+            <div className="relative flex h-2 w-2 items-center justify-center">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+            </div>
+            <span className="text-xs font-medium">Live</span>
+            <Separator orientation="vertical" className="h-4 mx-1" />
+            <Users className="w-3.5 h-3.5" />
+            <span className="text-xs font-medium">{onlineCount}</span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-50 text-xs">
+            <p className="font-semibold mb-1">Active Collaborators</p>
+            {onlineCount > 0 ? (
+              <ul className="space-y-1">
+                {onlineUsers.slice(0, 5).map((u) => (
+                  <li key={u.userId} className="truncate text-muted-foreground">
+                    {u.userId} {u.role ? `(${u.role})` : ""}
+                  </li>
+                ))}
+                {onlineCount > 5 && (
+                  <li className="text-muted-foreground italic">
+                    +{onlineCount - 5} more&hellip;
+                  </li>
+                )}
+              </ul>
+            ) : (
+              <p className="text-muted-foreground">Only you are currently online</p>
+            )}
+          </TooltipContent>
+        </Tooltip>
+
+        {/* Shipments quick-link */}
+        <Link
+          href="/shipments"
+          className="hidden md:flex items-center gap-2 h-9 px-4 rounded-lg border border-border bg-muted/30 text-muted-foreground text-sm hover:bg-muted/50 hover:text-foreground transition-colors"
+        >
+          Shipments
+        </Link>
+
+        {/* Notifications placeholder */}
+        <Tooltip>
+          <TooltipTrigger
+            aria-label="Notifications"
+            className="h-9 w-9 inline-flex items-center justify-center rounded-lg text-muted-foreground opacity-40 cursor-not-allowed"
+          >
+            <Bell className="w-4 h-4" />
+          </TooltipTrigger>
+          <TooltipContent>Notifications coming soon</TooltipContent>
+        </Tooltip>
+
+        {/* User menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="inline-flex h-9 cursor-pointer items-center gap-2.5 rounded-lg px-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none shrink-0"
+            aria-label="User menu"
+          >
+            <Avatar className="h-7 w-7">
+              <AvatarFallback className="bg-primary/20 text-primary text-[10px] font-bold">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="font-normal">
+                <p className="text-sm font-semibold truncate">{displayName}</p>
+                <p className="text-xs text-muted-foreground truncate">{user?.email ?? ""}</p>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem render={<Link href="/settings" />}>
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive cursor-pointer"
+              onClick={handleSignOut}
+            >
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </header>
+    </>
+  );
+}

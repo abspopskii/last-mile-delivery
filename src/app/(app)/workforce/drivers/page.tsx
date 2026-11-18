@@ -1,0 +1,269 @@
+"use client";
+
+import { fetchApi } from "@/lib/api-client";
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, RefreshCw, Plus, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useUser } from "@/lib/auth-context";
+import { useCompany } from "@/lib/company-context";
+import { useI18n } from "@/lib/i18n";
+import { DriverTable } from "@/components/workforce/DriverTable";
+import { DriverForm } from "@/components/workforce/DriverForm";
+import type { Driver } from "@/lib/types";
+
+function PageSkeleton() {
+  return (
+    <div className="max-w-7xl mx-auto w-full space-y-7">
+      <div className="pb-6 border-b border-border space-y-2">
+        <Skeleton className="h-3 w-32" />
+        <Skeleton className="h-8 w-56" />
+      </div>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <Skeleton className="h-10 flex-1 max-w-xs" />
+        <Skeleton className="h-10 w-40" />
+      </div>
+      <div className="panel p-5 bg-card space-y-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function DriverManagementPage() {
+  const router = useRouter();
+  const { user } = useUser();
+  const { userRecord, status } = useCompany();
+  const { t } = useI18n();
+
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [availability, setAvailability] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingDriver, setEditingDriver] = useState<Driver | undefined>(undefined);
+
+  const role = userRecord?.role;
+  const isReadOnly = role === "dispatcher" || role === "operations_manager";
+
+  const fetchDrivers = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetchApi("/api/workforce/drivers", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `Request failed with status ${res.status}`);
+      }
+      const json = await res.json();
+      setDrivers(json.drivers ?? []);
+
+      const availRes = await fetchApi("/api/workforce/drivers/availability", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (availRes.ok) {
+        const availJson = await availRes.json();
+        setAvailability(availJson.availability ?? []);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("workforce.failedToLoadDrivers"));
+    } finally {
+      setLoading(false);
+    }
+  }, [user, t]);
+
+  useEffect(() => {
+    if (status === "loading" || !user) return;
+    fetchDrivers();
+  }, [user, status, fetchDrivers]);
+
+  const handleSuspend = async (driver: Driver) => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      await fetchApi(`/api/workforce/drivers/${driver.driverId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: "suspended" }),
+      });
+    } catch {
+      /* non-fatal */
+    } finally {
+      fetchDrivers();
+    }
+  };
+
+  const handleActivate = async (driver: Driver) => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      await fetchApi(`/api/workforce/drivers/${driver.driverId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: "active" }),
+      });
+    } catch {
+      /* non-fatal */
+    } finally {
+      fetchDrivers();
+    }
+  };
+
+  const handleEdit = (driver: Driver) => {
+    setEditingDriver(driver);
+    setModalOpen(true);
+  };
+  const handleAdd = () => {
+    setEditingDriver(undefined);
+    setModalOpen(true);
+  };
+  const handleRowClick = (driverId: string) => {
+    router.push(`/workforce/drivers/${driverId}`);
+  };
+
+  const filteredDrivers = drivers.filter((d) => {
+    const q = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      q === "" ||
+      d.fullName.toLowerCase().includes(q) ||
+      d.employeeId.toLowerCase().includes(q) ||
+      d.licenseNumber.toLowerCase().includes(q);
+    return matchesSearch && (statusFilter === "all" || d.status === statusFilter);
+  });
+
+  if (loading) return <PageSkeleton />;
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto w-full">
+        <div className="panel p-12 text-center space-y-4 border border-dashed border-border/70">
+          <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
+          <div className="space-y-1">
+            <p className="text-sm font-bold text-foreground">{t("workforce.failedToLoadDrivers")}</p>
+            <p className="text-xs text-muted-foreground max-w-sm mx-auto">{error}</p>
+          </div>
+          <Button variant="outline" className="gap-2 h-9 px-4 text-xs font-bold uppercase tracking-wider" onClick={fetchDrivers}>
+            <RefreshCw className="w-3.5 h-3.5" />
+            {t("workforce.retry")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto w-full space-y-7 pb-12">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-border">
+        <div>
+          <p className="label-meta flex items-center gap-2 mb-2">
+            <Users className="w-3.5 h-3.5 text-primary" />
+            {t("workforce.workforce")}
+          </p>
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">{t("workforce.drivers")}</h1>
+        </div>
+
+        {!isReadOnly && (
+          <Button onClick={handleAdd} className="h-10 px-4 text-xs font-bold uppercase tracking-wider bg-primary hover:bg-primary/90 text-primary-foreground gap-2">
+            <Plus className="w-3.5 h-3.5" />
+            {t("workforce.addDriver")}
+          </Button>
+        )}
+      </div>
+
+      {availability.length > 0 && (
+        <div className="grid grid-cols-3 gap-4">
+          <Card className="bg-card border border-border">
+            <CardContent className="p-4 flex flex-col items-center">
+              <span className="text-2xl font-black text-emerald-500">{availability.filter(a => a.status === 'available').length}</span>
+              <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Available</span>
+            </CardContent>
+          </Card>
+          <Card className="bg-card border border-border">
+            <CardContent className="p-4 flex flex-col items-center">
+              <span className="text-2xl font-black text-blue-500">{availability.filter(a => a.status === 'driving').length}</span>
+              <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Driving</span>
+            </CardContent>
+          </Card>
+          <Card className="bg-card border border-border">
+            <CardContent className="p-4 flex flex-col items-center">
+              <span className="text-2xl font-black text-amber-500">{availability.filter(a => a.status === 'assigned').length}</span>
+              <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Assigned</span>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto flex-1 max-w-md">
+          <Input
+            placeholder={t("workforce.searchDrivers")}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-10 bg-muted/20 border-border text-xs font-medium rounded-lg"
+          />
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? "all")}>
+            <SelectTrigger className="w-full sm:w-44 h-10 bg-muted/20 border-border text-xs font-medium">
+              <SelectValue placeholder={t("workforce.allStatuses")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("workforce.allStatuses")}</SelectItem>
+              <SelectItem value="active">{t("workforce.active")}</SelectItem>
+              <SelectItem value="suspended">{t("workforce.suspended")}</SelectItem>
+              <SelectItem value="inactive">{t("workforce.inactive")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <p className="text-xs text-muted-foreground self-center font-mono font-medium">
+          {filteredDrivers.length}{" "}
+          {filteredDrivers.length === 1 ? t("workforce.driver") : t("workforce.drivers").toLowerCase()}
+        </p>
+      </div>
+
+      {/* Driver table */}
+      <div className="panel p-0 overflow-hidden bg-card">
+        <DriverTable
+          drivers={filteredDrivers}
+          currentUserRole={role ?? "dispatcher"}
+          currentUserId={userRecord?.userId ?? ""}
+          onEdit={handleEdit}
+          onSuspend={handleSuspend}
+          onActivate={handleActivate}
+          onRowClick={handleRowClick}
+        />
+      </div>
+
+      {/* Add / Edit form dialog */}
+      <DriverForm
+        mode={editingDriver ? "edit" : "add"}
+        driver={editingDriver}
+        open={modalOpen}
+        onOpenChange={(open) => {
+          setModalOpen(open);
+          if (!open) setEditingDriver(undefined);
+        }}
+        onSuccess={fetchDrivers}
+      />
+    </div>
+  );
+}

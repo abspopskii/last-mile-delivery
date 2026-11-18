@@ -1,0 +1,517 @@
+import { NextRequest, NextResponse } from "next/server";
+import type { Shipment, CreateShipmentRequest } from "@/lib/types";
+import { generateShipmentCode, getRiskLabel } from "@/lib/utils";
+import { getDb } from "@/lib/mongodb";
+import { verifyFirebaseToken } from "@/lib/firebase-admin";
+import { encryptObjectFields, decryptObjectFields } from "@/lib/encryption";
+import { emitToUser } from "@/lib/socket-server";
+import { utcNow } from "@/lib/time";
+import type { UserRecord } from "@/lib/types";
+import { createIntelligenceAudit } from "@/lib/intelligence-audit";
+import { addTimelineEvent } from "@/lib/timeline-service";
+import { apiLimiter, getClientIp } from "@/lib/rate-limit";
+import { ApiErrors } from "@/lib/api-errors";
+import { logger } from "@/lib/logger";
+import { agentLog } from "@/lib/debug-agent-log";
+
+/**
+ * GET /api/shipments
+ * Returns shipments scoped to the authenticated user.
+ * No/invalid auth → 401.
+ * DB error → 503.
+ *
+ * POST /api/shipments
+ * Creates a shipment owned by the authenticated user.
+ * No/invalid auth → 401.
+ * Invalid payload → 400.
+ * DB error → 500.
+ */
+
+// ─── GET /api/shipments ───────────────────────────────────────────────────────
+
+export async function GET(req: NextRequest) {
+  // Rate limit
+  const ip = getClientIp(req);
+  const rl = apiLimiter.check(ip);
+  if (rl.limited) return ApiErrors.rateLimited(rl.retryAfter);
+
+  let userId: string;
+
+  try {
+    const user = await verifyFirebaseToken(req);
+    userId = user.uid;
+  } catch (err) {
+    if (err instanceof Response) return err;
+    logger.error("shipments.GET.authError", {}, err);
+    return NextResponse.json(
+      { error: "Authentication service unavailable" },
+      { status: 503 }
+    );
+  }
+
+  try {
+    const getDbStartTime = Date.now();
+    const db = await getDb();
+    const getDbTimeMs = Date.now() - getDbStartTime;
+    console.log("[GET /api/shipments] getDb() took", getDbTimeMs, "ms");
+
+    // Resolve companyId for tenant isolation (falls back to userId-only for legacy records)
+    const userRecordStart = Date.now();
+    const userRecord = await db.collection<UserRecord>("users").findOne({ userId });
+    const userRecordTimeMs = Date.now() - userRecordStart;
+    console.log("[GET /api/shipments] User lookup took", userRecordTimeMs, "ms");
+    const companyId  = userRecord?.companyId;
+    const isSuperAdmin = userRecord?.role === "super_admin";
+
+    let queryCompanyId = companyId;
+    const targetCompanyId = req.nextUrl.searchParams.get("companyId");
+    if (isSuperAdmin && targetCompanyId) {
+      queryCompanyId = targetCompanyId;
+    }
+
+    if (isSuperAdmin && targetCompanyId) {
+      createIntelligenceAudit({
+        companyId: queryCompanyId!,
+        userId,
+        eventType: "super_admin_read",
+        source:    "ShipmentsRoute",
+        metadata: {
+          companyIdViewed: queryCompanyId,
+          endpoint:        "/api/shipments",
+          timestamp:       new Date().toISOString(),
+        },
+      }).catch(() => {});
+    }
+
+    const limit = parseInt(req.nextUrl.searchParams.get("limit") || "100", 10);
+    const page = parseInt(req.nextUrl.searchParams.get("page") || "1", 10);
+    const skip = (page - 1) * limit;
+
+    // Build query: if user has a company, scope by companyId; else fallback to userId
+    const query: Record<string, unknown> = queryCompanyId ? { companyId: queryCompanyId } : { userId };
+
+    console.log("[GET /api/shipments] Query params:", {
+      userHasCompanyId: !!companyId,
+      isSuperAdmin,
+      queryCompanyId,
+      targetCompanyId,
+      fallbackQuery: !queryCompanyId ? { userId } : undefined,
+      finalQuery: query,
+    });
+
+    // Branch hierarchy scoping
+    const branchFilter = req.nextUrl.searchParams.get("branchId");
+    if (branchFilter) {
+      query.branchId = branchFilter;
+    } else if (userRecord?.role === "branch_manager" && userRecord.branchId) {
+      query.branchId = userRecord.branchId;
+    }
+
+    // Fetch docs first (should be fast with limit)
+    console.log("[GET /api/shipments] Starting docs query...");
+    const docsStartTime = Date.now();
+    
+    // Time each step
+    const findStartTime = Date.now();
+    // Exclude heavy geometry array from list queries (geometry is only needed on detail map view)
+    const cursor = db.collection("shipments")
+      .find(query, { projection: { geometry: 0 } })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+    const findTimeMs = Date.now() - findStartTime;
+    console.log("[GET /api/shipments] Cursor created in", findTimeMs, "ms");
+    
+    const toArrayStartTime = Date.now();
+    const docs = await cursor.toArray();
+    const toArrayTimeMs = Date.now() - toArrayStartTime;
+    
+    const docsTimeMs = Date.now() - docsStartTime;
+    console.log("[GET /api/shipments] Docs query:", {
+      docsTimeMs,
+      findTimeMs,
+      toArrayTimeMs,
+      docCount: docs.length,
+    });
+
+    // Compute stats from docs for small result sets, or defer for large queries
+    const stats = {
+      total: docs.length,
+      active: docs.filter(d => ["active", "at-risk"].includes(d.status)).length,
+      atRisk: docs.filter(d => d.status === "at-risk").length,
+      completed: docs.filter(d => d.status === "completed").length,
+      avgRisk: 0,
+      highRiskAvoided: 0
+    };
+
+    if (docs.length > 0) {
+      stats.avgRisk = Math.round(docs.reduce((sum, d) => sum + (d.riskScore || 0), 0) / docs.length);
+      stats.highRiskAvoided = docs.filter(d => 
+        d.selectedRoute !== "fastest" && (d.riskScore || 0) > 50
+      ).length;
+    }
+
+    // If limit is small (e.g. first page), also get total count for pagination
+    let statsResult: { total?: number } = {};
+    if (limit < 50) {
+      const statsStartTime = Date.now();
+      statsResult = await db.collection("shipments").aggregate([
+        { $match: query },
+        { 
+          $group: { 
+            _id: null, 
+            total: { $sum: 1 }, 
+          } 
+        }
+      ]).toArray().then(r => r[0] || {});
+      const statsTimeMs = Date.now() - statsStartTime;
+      console.log("[GET /api/shipments] Stats query (count only):", {
+        statsTimeMs,
+        total: statsResult.total,
+      });
+      if (statsResult.total) {
+        stats.total = statsResult.total;
+      }
+    }
+
+    // #region agent log
+    agentLog({ hypothesisId: "C", location: "shipments/route.ts:GET:result", message: "GET shipments query result", data: { queryCompanyId: queryCompanyId ?? null, isSuperAdmin, docCount: docs.length, sampleIds: docs.slice(0, 5).map((d) => d.id), sampleCompanyIds: docs.slice(0, 5).map((d) => d.companyId) } });
+    // #endregion
+
+    const shipments: Shipment[] = docs.map((doc) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { _id, userId: _uid, ...rest } = doc;
+      // Decrypt sensitive fields before sending to client
+      const decrypted = decryptObjectFields(rest, ["notes", "contactDetails", "specialInstructions"]);
+      return decrypted as Shipment;
+    });
+
+    return NextResponse.json({ shipments, total: stats.total, stats });
+  } catch (err) {
+    console.error("[GET /api/shipments] DB error:", err);
+    return NextResponse.json(
+      { error: "Failed to fetch shipments" },
+      { status: 503 }
+    );
+  }
+}
+
+// ─── POST /api/shipments ──────────────────────────────────────────────────────
+
+export async function POST(req: NextRequest) {
+  // #region agent log
+  agentLog({ hypothesisId: "E", location: "shipments/route.ts:POST:entry", message: "POST /api/shipments hit" });
+  // #endregion
+  // Rate limit
+  const ip = getClientIp(req);
+  const rl = apiLimiter.check(ip);
+  if (rl.limited) return ApiErrors.rateLimited(rl.retryAfter);
+
+  let userId: string;
+
+  try {
+    const user = await verifyFirebaseToken(req);
+    userId = user.uid;
+  } catch (err) {
+    if (err instanceof Response) return err;
+    console.error("[POST /api/shipments] Auth service error:", err);
+    return NextResponse.json(
+      { error: "Authentication service unavailable" },
+      { status: 503 }
+    );
+  }
+
+  let raw: Record<string, unknown>;
+  try {
+    raw = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const {
+    origin,
+    destination,
+    vehicleType,
+    cargoType,
+    routeId,
+    routeName,
+    eta,
+    distance,
+    riskScore,
+    riskLevel,
+    confidencePercent,
+    predictiveAlert,
+    riskBreakdown,
+    // Geoapify coordinate fields (optional)
+    originName,
+    originAddress,
+    originLat,
+    originLng,
+    originPlaceId,
+    destinationName,
+    destinationAddress,
+    destinationLat,
+    destinationLng,
+    destinationPlaceId,
+    // Cargo + schedule (optional)
+    cargoWeightKg,
+    cargoVolumeM3,
+    plannedDeparture,
+    plannedArrival,
+  } = raw as unknown as CreateShipmentRequest;
+
+  // Module 4 optional fields
+  const priority               = typeof raw.priority               === "string" ? raw.priority               : undefined;
+  const insuranceType          = typeof raw.insuranceType          === "string" ? raw.insuranceType          : undefined;
+  const temperatureRequirement = typeof raw.temperatureRequirement === "string" ? raw.temperatureRequirement : undefined;
+  const deadline               = typeof raw.deadline               === "string" ? raw.deadline               : undefined;
+
+  // Also extract weather/disruption scores for at-risk classification
+  const weatherScore    = typeof (raw as Record<string, unknown>).weatherScore    === "number" ? (raw as Record<string, unknown>).weatherScore    as number : riskBreakdown?.weather    ?? 0;
+  const disruptionScore = typeof (raw as Record<string, unknown>).disruptionScore === "number" ? (raw as Record<string, unknown>).disruptionScore as number : riskBreakdown?.disruption ?? 0;
+
+  // Validate required string fields
+  const missingString = (
+    [
+      ["origin",      origin],
+      ["destination", destination],
+      ["vehicleType", vehicleType],
+      ["cargoType",   cargoType],
+      ["routeId",     routeId],
+      ["routeName",   routeName],
+      ["eta",         eta],
+      ["distance",    distance],
+      ["riskLevel",   riskLevel],
+    ] as [string, unknown][]
+  ).find(([, v]) => !v || typeof v !== "string");
+
+  if (missingString) {
+    console.warn(`[POST /api/shipments] Invalid payload - missing field: ${missingString[0]}`);
+    return NextResponse.json(
+      { error: `Missing or invalid field: ${missingString[0]}` },
+      { status: 400 }
+    );
+  }
+
+  if (typeof riskScore !== "number" || !isFinite(riskScore)) {
+    console.warn("[POST /api/shipments] Invalid payload - riskScore not a number");
+    return NextResponse.json({ error: "riskScore must be a number" }, { status: 400 });
+  }
+  if (typeof confidencePercent !== "number" || !isFinite(confidencePercent)) {
+    console.warn("[POST /api/shipments] Invalid payload - confidencePercent not a number");
+    return NextResponse.json({ error: "confidencePercent must be a number" }, { status: 400 });
+  }
+
+  const now = utcNow(); // UTC ISO - clients display in their local timezone
+
+  const selectedRoute =
+    routeId.includes("fastest") ? "fastest" as const :
+    routeId.includes("safest")  ? "safest"  as const :
+    "balanced" as const;
+
+  // At-risk classification:
+  //   riskScore >= 60 (default autoFlagThreshold)
+  //   OR weatherScore > 70 (severe weather on corridor)
+  //   OR disruptionScore > 60 (active disruptions)
+  const isAtRisk =
+    riskScore >= 60 ||
+    weatherScore > 70 ||
+    disruptionScore > 60;
+  const shipmentStatus: Shipment["status"] = isAtRisk ? "at-risk" : "active";
+
+  const shipment: Shipment = {
+    id:                `shp-${Date.now()}`,
+    shipmentCode:      generateShipmentCode(),
+    origin,
+    destination,
+    selectedRoute,
+    routeName,
+    riskScore,
+    riskLevel:         getRiskLabel(riskScore),
+    eta,
+    status:            shipmentStatus,
+    lastUpdate:        now,
+    cargoType,
+    vehicleType,
+    distance,
+    departureTime:     new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+    confidencePercent,
+    predictiveAlert:   typeof predictiveAlert === "string" && predictiveAlert
+                         ? predictiveAlert
+                         : undefined,
+    riskBreakdown:     riskBreakdown ?? undefined,
+    geometry:          Array.isArray((raw as Record<string, unknown>).geometry)
+                         ? (raw as Record<string, unknown>).geometry as [number, number][]
+                         : undefined,
+    createdAt:         now,
+    updatedAt:         now,
+    // Geoapify location data
+    ...(originName       ? { originName }       : {}),
+    ...(originAddress    ? { originAddress }    : {}),
+    ...(typeof originLat === "number" && isFinite(originLat) ? { originLat } : {}),
+    ...(typeof originLng === "number" && isFinite(originLng) ? { originLng } : {}),
+    ...(originPlaceId    ? { originPlaceId }    : {}),
+    ...(destinationName       ? { destinationName }       : {}),
+    ...(destinationAddress    ? { destinationAddress }    : {}),
+    ...(typeof destinationLat === "number" && isFinite(destinationLat) ? { destinationLat } : {}),
+    ...(typeof destinationLng === "number" && isFinite(destinationLng) ? { destinationLng } : {}),
+    ...(destinationPlaceId    ? { destinationPlaceId }    : {}),
+    // Cargo + schedule
+    ...(typeof cargoWeightKg === "number" && isFinite(cargoWeightKg) ? { cargoWeightKg } : {}),
+    ...(typeof cargoVolumeM3 === "number" && isFinite(cargoVolumeM3) ? { cargoVolumeM3 } : {}),
+    ...(plannedDeparture ? { plannedDeparture } : {}),
+    ...(plannedArrival   ? { plannedArrival }   : {}),
+    // Module 4 optional fields
+    ...(priority               ? { priority }               : {}),
+    ...(insuranceType          ? { insuranceType }          : {}),
+    ...(temperatureRequirement ? { temperatureRequirement } : {}),
+    ...(deadline               ? { deadline }               : {}),
+  };
+
+  let companyId: string | undefined;
+
+  try {
+    const db = await getDb();
+
+    // Resolve companyId for tenant isolation
+    const userRecord = await db.collection<UserRecord>("users").findOne({ userId });
+    companyId = userRecord?.companyId;
+
+    // #region agent log
+    agentLog({ hypothesisId: "A", location: "shipments/route.ts:POST:companyResolve", message: "resolved user/company for create", data: { hasUserRecord: !!userRecord, hasCompanyId: !!companyId, role: userRecord?.role ?? null, shipmentId: shipment.id } });
+    // #endregion
+
+    // Task 5: enforce ownership fields - both required on every new shipment
+    // companyId comes from the authenticated user's company, never from request body
+    // createdByUserId is the authenticated user's uid
+    if (!companyId) {
+      console.warn("[POST /api/shipments] No companyId on userRecord - shipment blocked");
+      // #region agent log
+      agentLog({ hypothesisId: "A", location: "shipments/route.ts:POST:noCompanyId", message: "blocked create: missing companyId", data: { shipmentId: shipment.id } });
+      // #endregion
+      return NextResponse.json(
+        { error: "No company associated with this account. Complete company registration first." },
+        { status: 403 }
+      );
+    }
+
+    // Task 6: prevent suspended companies from creating shipments
+    const company = await db.collection("companies").findOne({ companyId });
+    if (company?.status === "suspended") {
+      return NextResponse.json(
+        { error: "Company account is suspended. Shipments cannot be created." },
+        { status: 403 }
+      );
+    }
+    if (company?.status === "pending" || company?.status === "rejected") {
+      return NextResponse.json(
+        { error: `Company is ${company.status as string}. Shipments require an approved company.` },
+        { status: 403 }
+      );
+    }
+
+    // Strip undefined values - MongoDB rejects documents containing undefined fields
+    const cleanBreakdown = shipment.riskBreakdown
+      ? Object.fromEntries(Object.entries(shipment.riskBreakdown).filter(([, v]) => v !== undefined))
+      : undefined;
+
+    const rawDocument: Record<string, unknown> = Object.fromEntries(
+      Object.entries({ ...shipment, riskBreakdown: cleanBreakdown })
+        .filter(([, v]) => v !== undefined)
+    );
+
+    // Encrypt sensitive fields (notes, contactDetails, specialInstructions)
+    // before persisting - non-sensitive operational fields are stored as-is
+    const encryptedDocument = encryptObjectFields(rawDocument, ["notes", "contactDetails", "specialInstructions"]);
+
+    // Always scope to authenticated userId + companyId - never trust from request body
+    // Task 5: createdByUserId and companyId are mandatory on every shipment record
+    // #region agent log
+    agentLog({ hypothesisId: "B", location: "shipments/route.ts:POST:beforeInsert", message: "about to insertOne shipment", data: { shipmentId: shipment.id, companyId, hasCompanyIdOnShipmentObject: !!shipment.companyId } });
+    // #endregion
+    const insertPayload = {
+      ...encryptedDocument,
+      userId,
+      companyId,          // always set - enforced above
+      createdByUserId: userId, // ownership field
+    };
+    
+    const _logPayload = insertPayload as Record<string, unknown>;
+    console.log("[POST /api/shipments] Inserting shipment:", {
+      shipmentId: _logPayload.id,
+      companyId: _logPayload.companyId,
+      userId: _logPayload.userId,
+      createdByUserId: _logPayload.createdByUserId,
+      origin: _logPayload.origin,
+      destination: _logPayload.destination,
+    });
+    
+    const insertResult = await db.collection("shipments").insertOne(insertPayload);
+    
+    console.log("[POST /api/shipments] Insert result:", {
+      insertedId: insertResult.insertedId,
+      acknowledged: insertResult.acknowledged,
+    });
+    // #region agent log
+    agentLog({ hypothesisId: "B", location: "shipments/route.ts:POST:afterInsert", message: "insertOne completed", data: { shipmentId: shipment.id, insertedId: String(insertResult.insertedId), acknowledged: insertResult.acknowledged } });
+    // #endregion
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("[POST /api/shipments] DB insert error:", detail);
+    // #region agent log
+    agentLog({ hypothesisId: "B", location: "shipments/route.ts:POST:insertCatch", message: "insert failed", data: { detail: detail.slice(0, 500), shipmentId: shipment.id } });
+    // #endregion
+    return NextResponse.json({ error: `Failed to save shipment: ${detail}` }, { status: 500 });
+  }
+
+  // Emit real-time event to the user's connected clients
+  emitToUser(userId, "shipment:created", { shipment });
+  // Trigger Analytics Refresh
+  import("@/lib/socket-server").then(({ emitAnalyticsRefresh }) => {
+    if (companyId) emitAnalyticsRefresh(companyId);
+  }).catch(() => {});
+
+  // Write "Shipment Created" timeline event so the timeline is never empty
+  addTimelineEvent(
+    shipment.id,
+    shipment.companyId!,
+    "Shipment Created",
+    `Shipment dispatched via ${shipment.routeName} - ${shipment.origin} → ${shipment.destination}. ` +
+    `Risk: ${shipment.riskScore} (${shipment.riskLevel}). ETA: ${shipment.eta}. Distance: ${shipment.distance}.`,
+    "SentinelRoute",
+    shipment.confidencePercent,
+    ["riskScore", "eta", "distance"]
+  ).catch(() => {/* fire-and-forget - never block the response */});
+
+  // Trigger prediction engine - fire-and-forget, never blocks response
+  import("@/lib/prediction-engine").then(({ calculateRoutePrediction }) => {
+    calculateRoutePrediction(shipment).catch((err) => {
+      console.error("[POST /api/shipments] prediction engine error:", err);
+    });
+  }).catch(() => {});
+
+  // Create communication channel for this shipment - fire-and-forget
+  import("@/lib/mongodb").then(async ({ getDb: getDbLazy }) => {
+    try {
+      const dbLazy = await getDbLazy();
+      const existing = await dbLazy.collection("shipment_channels").findOne({
+        shipmentId: shipment.id,
+        companyId:  shipment.companyId,
+      });
+      if (!existing) {
+        await dbLazy.collection("shipment_channels").insertOne({
+          channelId:  `ch-${shipment.id}`,
+          shipmentId: shipment.id,
+          companyId:  shipment.companyId,
+          active:     true,
+          createdAt:  shipment.createdAt,
+          updatedAt:  shipment.createdAt,
+        });
+      }
+    } catch (err) {
+      console.error("[POST /api/shipments] channel creation error:", err);
+    }
+  }).catch(() => {});
+
+  return NextResponse.json({ shipment }, { status: 201 });
+}

@@ -1,0 +1,80 @@
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
+import { StoreProvider } from "@/lib/store";
+import { UserProvider } from "@/lib/auth-context";
+import { SettingsProvider } from "@/lib/settings-context";
+import { CompanyProvider } from "@/lib/company-context";
+import { I18nProvider } from "@/lib/i18n";
+import { logEnvStatus } from "@/lib/env";
+
+// Runs once on server cold-start - confirms all env vars are present
+logEnvStatus();
+
+const geistSans = Geist({
+  variable: "--font-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "SentinelRoute - Logistics Decision Intelligence",
+  description:
+    "Compare shipment routes, assess operational risk, and make routing decisions you can defend.",
+  manifest: "/manifest.json",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#10b981",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} dark`}
+      suppressHydrationWarning
+    >
+      <body suppressHydrationWarning className="min-h-screen bg-background text-foreground antialiased">
+        <UserProvider>
+          <CompanyProvider>
+            <I18nProvider>
+              <StoreProvider>
+                <SettingsProvider>
+                  <TooltipProvider delay={300}>
+                    {children}
+                  </TooltipProvider>
+                  <Toaster position="bottom-right" theme="dark" richColors />
+                </SettingsProvider>
+              </StoreProvider>
+            </I18nProvider>
+          </CompanyProvider>
+        </UserProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(
+                    function(registration) { },
+                    function(err) { console.log('Service Worker registration failed: ', err); }
+                  );
+                });
+              }
+            `,
+          }}
+        />
+      </body>
+    </html>
+  );
+}

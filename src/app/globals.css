@@ -1,0 +1,196 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+
+  /* Custom SentinelRoute tokens */
+  --color-amber: var(--sr-amber);
+  --color-amber-foreground: var(--sr-amber-foreground);
+  --color-emerald: var(--sr-emerald);
+  --color-emerald-foreground: var(--sr-emerald-foreground);
+  --color-danger: var(--sr-danger);
+  --color-panel: var(--sr-panel);
+  --color-surface: var(--sr-surface);
+  --color-steel: var(--sr-steel);
+}
+
+/* ===================== */
+/* INDUSTRIAL INTELLIGENCE - Logistics Control Room */
+/* ===================== */
+:root, .dark {
+  /* ── Base (improved depth) ────────────────────────────────────────────── */
+  --background: #080B0F;
+  --foreground: #F1F3F5;
+  --card: #0D1218;               /* SURFACE */
+  --card-foreground: #F1F3F5;
+  --popover: #121820;            /* ELEVATED */
+  --popover-foreground: #F1F3F5;
+
+  /* ── Primary - Brand Copper ───────────────────────────────────────────── */
+  --primary: #C47A3A;
+  --primary-foreground: #080B0F;
+  --ring: #C47A3A;
+
+  /* ── Secondary / Surfaces ─────────────────────────────────────────────── */
+  --secondary: #121820;          /* ELEVATED */
+  --secondary-foreground: #8B98A5; /* SECONDARY TEXT */
+  --muted: #121820;
+  --muted-foreground: #8B98A5;
+  --accent: #121820;
+  --accent-foreground: #F1F3F5;
+
+  /* ── Borders / Inputs ─────────────────────────────────────────────────── */
+  --border: #202A33;
+  --input: #202A33;
+
+  /* ── Semantic ─────────────────────────────────────────────────────────── */
+  --destructive: #D45C5C;
+  --destructive-foreground: #080B0F;
+
+  /* ── Charts - multi-accent palette ───────────────────────────────────── */
+  --chart-1: #C47A3A;             /* COPPER */
+  --chart-2: #6F8799;             /* STEEL */
+  --chart-3: #3FAF7A;             /* GREEN */
+  --chart-4: #D6A84F;             /* AMBER */
+  --chart-5: #D45C5C;             /* RED */
+
+  --radius: 0.5rem;
+
+  /* ── Sidebar ──────────────────────────────────────────────────────────── */
+  --sidebar: #0D1218;
+  --sidebar-foreground: #F1F3F5;
+  --sidebar-primary: #C47A3A;
+  --sidebar-primary-foreground: #080B0F;
+  --sidebar-accent: #121820;
+  --sidebar-accent-foreground: #F1F3F5;
+  --sidebar-border: #202A33;
+  --sidebar-ring: #C47A3A;
+
+  /* ── SentinelRoute custom ─────────────────────────────────────────────── */
+  --sr-amber: #D6A84F;
+  --sr-amber-foreground: #080B0F;
+  --sr-emerald: #3FAF7A;
+  --sr-emerald-foreground: #080B0F;
+  --sr-danger: #D45C5C;
+  --sr-panel: #0D1218;
+  --sr-surface: #0D1218;
+  --sr-steel: #6F8799;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans overflow-x-hidden;
+  }
+  body {
+    @apply bg-background text-foreground leading-relaxed overflow-x-hidden;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply bg-card border border-border rounded-lg;
+  }
+
+  .label-meta {
+    @apply text-[0.65rem] font-semibold uppercase tracking-widest text-muted-foreground;
+  }
+
+  .risk-bar {
+    @apply h-2 rounded-full bg-muted overflow-hidden;
+  }
+
+  /* ── Shared form input style (used in route-intelligence and other non-shadcn forms) */
+  .input {
+    @apply flex h-10 w-full rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring transition-colors;
+  }
+
+  /* ── Shared primary button style ──────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+}
+
+@utility scrollbar-hidden {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+@utility animate-shimmer {
+  animation: shimmer 4s linear infinite;
+}
+
+/* ── Leaflet map container fix ───────────────────────────────────────────── */
+.leaflet-container {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.leaflet-pane,
+.leaflet-tile-pane,
+.leaflet-overlay-pane,
+.leaflet-shadow-pane,
+.leaflet-marker-pane,
+.leaflet-tooltip-pane,
+.leaflet-popup-pane {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.leaflet-tile-container {
+  position: absolute;
+  left: 0;
+  top: 0;
+}

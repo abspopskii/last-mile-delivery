@@ -1,0 +1,184 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Activity, AlertTriangle, Clock, Zap } from "lucide-react";
+import { formatRelativeTime, cn } from "@/lib/utils";
+import { OperationalHealthScore, OperationalRecommendation } from "@/lib/types";
+import { Progress } from "@/components/ui/progress";
+import { useStore } from "@/lib/store";
+import Link from "next/link";
+
+interface FeedEvent {
+  type: string;
+  description?: string;
+  timestamp: string;
+}
+
+export function OperationalFeed() {
+  const { operationalFeed: feedData, operationalHealth: healthScore } = useStore();
+  const loading = !feedData || !healthScore;
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case "critical": return "destructive";
+      case "high": return "warning";
+      case "medium": return "secondary";
+      default: return "default";
+    }
+  };
+
+  const getHealthColor = (score: number) => {
+    if (score >= 90) return "text-emerald-500";
+    if (score >= 75) return "text-blue-500";
+    if (score >= 50) return "text-amber-500";
+    return "text-red-500";
+  };
+
+  return (
+    <Card className="flex flex-col border shadow-sm col-span-full xl:col-span-1">
+      <CardHeader className="pb-3 border-b bg-muted/20">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Zap className="h-5 w-5 text-primary" />
+              Operational Intelligence
+            </CardTitle>
+            <CardDescription>
+              Real-time events and system recommendations
+            </CardDescription>
+          </div>
+          {healthScore && healthScore.score !== undefined && (
+            <div className="text-right">
+              <div className={`text-2xl font-bold ${getHealthColor(healthScore.score)}`}>
+                {healthScore.score}
+              </div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+                Health Score
+              </div>
+            </div>
+          )}
+        </div>
+        {healthScore && healthScore.score !== undefined && (
+          <div className="mt-2 space-y-1">
+             <Progress value={healthScore.score} className="h-2" />
+             <div className="flex justify-between text-xs text-muted-foreground">
+               <span>Critical</span>
+               <span>Excellent</span>
+             </div>
+          </div>
+        )}
+      </CardHeader>
+      <CardContent className="flex-1 p-0 overflow-hidden">
+        <Tabs defaultValue="recommendations" className="h-full flex flex-col">
+          <TabsList className="w-full justify-start rounded-none border-b bg-transparent p-0">
+            <TabsTrigger 
+              value="recommendations" 
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none py-3"
+            >
+              Recommendations
+              {feedData && (feedData.recommendations?.length ?? 0) > 0 && (
+                <Badge variant="secondary" className="ml-2 bg-primary/10 text-primary hover:bg-primary/20">
+                  {feedData.recommendations?.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger 
+              value="events" 
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:shadow-none py-3"
+            >
+              Live Feed
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="recommendations" className="flex-1 m-0 overflow-hidden">
+            <ScrollArea className="h-auto max-h-[320px] w-full p-4">
+              {loading ? (
+                <div className="animate-pulse bg-muted h-20 rounded-lg mb-2" />
+              ) : feedData?.recommendations && feedData.recommendations.length > 0 ? (
+                <div className="space-y-3">
+                  {feedData.recommendations.map((rec: OperationalRecommendation) => (
+                    <Link href={`/shipments/${rec.shipmentId}`} key={rec.recommendationId} className="block">
+                      <div className="p-3 border rounded-lg bg-card hover:bg-muted/50 transition-colors shadow-sm">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-semibold text-sm">{rec.type}</span>
+                          <div className="flex gap-1.5">
+                            <Badge variant="outline" className={cn("text-[10px] capitalize", 
+                              rec.lifecycleStatus === "accepted" || rec.lifecycleStatus === "executed" || rec.lifecycleStatus === "completed" ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : 
+                              rec.lifecycleStatus === "rejected" || rec.lifecycleStatus === "cancelled" ? "bg-red-500/10 text-red-500 border-red-500/20" :
+                              "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                            )}>
+                              {rec.lifecycleStatus}
+                            </Badge>
+                            <Badge variant={getSeverityColor(rec.severity) as "destructive" | "secondary" | "default" | "outline"} className="text-[10px]">
+                              {rec.severity}
+                            </Badge>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2">{rec.reason}</p>
+                        <div className="mt-3 flex items-center justify-between text-[10px] text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            <Activity className="h-3 w-3" /> Shipment: {rec.shipmentId.slice(0,8)}
+                          </div>
+                          <span>{formatRelativeTime(rec.createdAt)}</span>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center text-muted-foreground py-8 px-4 space-y-2">
+                  <div className="w-8 h-8 rounded-full bg-muted/40 border border-border flex items-center justify-center">
+                    <Activity className="h-4 w-4 opacity-50" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground/70">No active recommendations</p>
+                  <p className="text-xs text-muted-foreground max-w-[200px]">System is monitoring. Recommendations appear when route or operational adjustments are needed.</p>
+                </div>
+              )}
+            </ScrollArea>
+          </TabsContent>
+          
+          <TabsContent value="events" className="flex-1 m-0 overflow-hidden">
+             <ScrollArea className="h-auto max-h-[320px] w-full p-4">
+              {loading ? (
+                <div className="animate-pulse bg-muted h-20 rounded-lg mb-2" />
+              ) : feedData?.events && (feedData.events?.length ?? 0) > 0 ? (
+                <div className="space-y-4">
+                  {feedData.events?.map((event: FeedEvent, i: number) => (
+                    <div key={i} className="flex gap-3">
+                      <div className="mt-0.5">
+                        {event.type.includes("Alert") || event.type.includes("Incident") ? (
+                          <AlertTriangle className="h-4 w-4 text-red-500" />
+                        ) : (
+                          <Activity className="h-4 w-4 text-blue-500" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium">{event.type}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{event.description}</div>
+                        <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1">
+                          <Clock className="h-3 w-3" /> {formatRelativeTime(event.timestamp)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center text-muted-foreground py-8 px-4 space-y-2">
+                  <div className="w-8 h-8 rounded-full bg-muted/40 border border-border flex items-center justify-center">
+                    <Activity className="h-4 w-4 opacity-50" />
+                  </div>
+                  <p className="text-sm font-medium text-foreground/70">No recent events</p>
+                  <p className="text-xs text-muted-foreground max-w-[200px]">Live operational events will stream here as network activity is detected.</p>
+                </div>
+              )}
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
+  );
+}
