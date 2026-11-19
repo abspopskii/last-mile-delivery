@@ -180,8 +180,8 @@ Every route is evaluated across live traffic patterns, weather conditions along 
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/sentinelroute.git
-cd sentinelroute
+git clone https://github.com/your-username/SentinelRoute.git
+cd SentinelRoute
 
 # Install dependencies
 npm install
@@ -291,6 +291,6 @@ The SentinelRoute platform is released under the [MIT License](LICENSE).
 
 **SentinelRoute** -Because routing decisions should be reliable, explainable, and data-driven.
 
-[GitHub](https://github.com/your-username/sentinelroute) · [MIT License](LICENSE) · [Report Issue](https://github.com/your-username/sentinelroute/issues)
+[GitHub](https://github.com/your-username/SentinelRoute) · [MIT License](LICENSE) · [Report Issue](https://github.com/your-username/SentinelRoute/issues)
 
 </div>

@@ -98,6 +98,13 @@ export const firebaseConfig = {
 export const MONGODB_URI = lazyEnv("MONGODB_URI");
 
 /**
+ * Optional DNS resolvers used by Node's SRV lookup for MongoDB.
+ * Comma-separated IP addresses; unset uses the system resolver.
+ */
+export const MONGODB_DNS_SERVERS = (): string =>
+  process.env.MONGODB_DNS_SERVERS?.trim() ?? "";
+
+/**
  * OpenWeather API key - server-side only.
  * Call OPENWEATHER_API_KEY() inside a request handler, never at top level.
  */

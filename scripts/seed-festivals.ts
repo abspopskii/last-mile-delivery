@@ -3,7 +3,7 @@ import * as dotenv from "dotenv";
 
 dotenv.config({ path: ".env.local" });
 
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/sentinelroute";
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/SentinelRoute";
 
 const FESTIVALS_TO_SEED = [
   {

@@ -9,7 +9,7 @@ Annotated repository tree explaining every major folder and file.
 ## Full Tree
 
 ```
-sentinelroute/
+SentinelRoute/
 ├── src/
 │   ├── app/
 │   │   ├── (app)/                        # Protected app shell -auth + company guards

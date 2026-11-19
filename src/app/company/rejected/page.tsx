@@ -87,7 +87,7 @@ export default function CompanyRejectedPage() {
           <Button
             variant="outline"
             className="gap-2 h-10 px-5"
-            onClick={() => window.open("mailto:support@sentinelroute.com", "_blank")}
+            onClick={() => window.open("mailto:support@SentinelRoute.com", "_blank")}
           >
             <Mail className="w-4 h-4" />
             Contact Support

@@ -122,6 +122,8 @@ export async function POST(req: NextRequest) {
       createdAt: now,
     };
 
+
+
     await db.collection("companies").insertOne(company);
     await db.collection("users").insertOne(userRecord);
 
@@ -137,7 +139,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ userRecord, company }, { status: 201 });
   } catch (err) {
-    console.error("[POST /api/company/register]", err);
+    console.log("[POST /api/company/register]", err);
     const detail = process.env.NODE_ENV === "development" && err instanceof Error
       ? ` (${err.message})`
       : "";

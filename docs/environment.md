@@ -21,7 +21,8 @@ Fill in all required values before running `npm run dev` or deploying.
 | Variable | Required | Description |
 |---|---|---|
 | `MONGODB_URI` | Yes | MongoDB Atlas connection string. Format: `mongodb+srv://<user>:<password>@cluster.mongodb.net/?appName=SentinelRoute` |
-| `MONGODB_DB_NAME` | No | Database name. Defaults to `sentinelroute` if unset. |
+| `MONGODB_DNS_SERVERS` | No | Comma-separated DNS resolver IPs for MongoDB SRV lookups when Node's system resolver is unavailable (for example, `1.1.1.1,1.0.0.1`). Unset by default. |
+| `MONGODB_DB_NAME` | No | Database name. Defaults to `SentinelRoute` if unset. |
 
 ### Firebase Client SDK (Public -safe to expose)
 

@@ -114,7 +114,7 @@ export default function DriverAppPage() {
       const url = `/api/execution/${execution.shipmentId}/location`;
 
       if (!navigator.onLine) {
-        const OFFLINE_LOC_KEY = "sentinelroute_offline_locations";
+        const OFFLINE_LOC_KEY = "SentinelRoute_offline_locations";
         const stored = JSON.parse(localStorage.getItem(OFFLINE_LOC_KEY) || "[]");
         stored.push({ url, payload });
         // Keep last 50 offline locations
@@ -163,8 +163,8 @@ export default function DriverAppPage() {
 
   // Offline Sync
   useEffect(() => {
-    const OFFLINE_KEY = "sentinelroute_offline_actions";
-    const OFFLINE_LOC_KEY = "sentinelroute_offline_locations";
+    const OFFLINE_KEY = "SentinelRoute_offline_actions";
+    const OFFLINE_LOC_KEY = "SentinelRoute_offline_locations";
 
     const syncOffline = async () => {
       if (!navigator.onLine) return;
@@ -255,7 +255,7 @@ export default function DriverAppPage() {
     const url = `/api/execution/${execution.shipmentId}/workflow`;
 
     if (!navigator.onLine) {
-      const OFFLINE_KEY = "sentinelroute_offline_actions";
+      const OFFLINE_KEY = "SentinelRoute_offline_actions";
       const actions = JSON.parse(localStorage.getItem(OFFLINE_KEY) || "[]");
       actions.push({ url, payload });
       localStorage.setItem(OFFLINE_KEY, JSON.stringify(actions));
@@ -292,7 +292,7 @@ export default function DriverAppPage() {
     const url = `/api/execution/${execution.shipmentId}/checkpoint`;
 
     if (!navigator.onLine) {
-      const OFFLINE_KEY = "sentinelroute_offline_actions";
+      const OFFLINE_KEY = "SentinelRoute_offline_actions";
       const actions = JSON.parse(localStorage.getItem(OFFLINE_KEY) || "[]");
       actions.push({ url, payload });
       localStorage.setItem(OFFLINE_KEY, JSON.stringify(actions));

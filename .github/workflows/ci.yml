@@ -51,7 +51,7 @@ jobs:
       NEXT_PUBLIC_FIREBASE_APP_ID:             ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
       # Dummy values for server vars that env.ts reads at BUILD time
       # (real values are injected at runtime by the deployment environment)
-      MONGODB_URI:            "mongodb://localhost:27017/sentinelroute-ci"
+      MONGODB_URI:            "mongodb://localhost:27017/SentinelRoute-ci"
       FIREBASE_PROJECT_ID:    "ci-placeholder"
       FIREBASE_CLIENT_EMAIL:  "ci@ci.iam.gserviceaccount.com"
       FIREBASE_PRIVATE_KEY:   "ci-placeholder"

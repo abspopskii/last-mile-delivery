@@ -72,7 +72,7 @@ Verify all required variables are set in the deployment environment.
 
 - [ ] Cluster tier: **M10 or higher** for production (M0 free tier is not suitable)
 - [ ] Network access: IP allowlist includes all deployment server IPs
-- [ ] Database user has `readWrite` permission on the `sentinelroute` database
+- [ ] Database user has `readWrite` permission on the `SentinelRoute` database
 - [ ] Atlas backup enabled (see Backup Strategy below)
 - [ ] Connection string uses `?retryWrites=true&w=majority`
 
@@ -162,7 +162,7 @@ MongoDB Atlas provides **automated backups** on M10+ clusters:
 # Requires mongodump installed locally
 mongodump \
   --uri="$MONGODB_URI" \
-  --db=sentinelroute \
+  --db=SentinelRoute \
   --out=./backup/$(date +%Y%m%d)
 ```
 

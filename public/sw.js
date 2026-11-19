@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sentinelroute-v1';
+const CACHE_NAME = 'SentinelRoute-v1';
 const OFFLINE_URL = '/';
 
 self.addEventListener('install', (event) => {

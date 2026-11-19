@@ -375,7 +375,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchShipments = useCallback(async (cancelSignal?: AbortSignal) => {
-    if (!user) { dispatch({ type: "SET_SHIPMENTS", payload: { shipments: [] } }); return; }
+    if (!user || !company?.companyId) {
+      dispatch({ type: "SET_SHIPMENTS", payload: { shipments: [] } });
+      return;
+    }
     dispatch({ type: "SET_LOADING", payload: true });
     try {
       const res = await fetchWithAuth(
@@ -407,7 +410,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }
       dispatch({ type: "SET_LOADING", payload: false });
     }
-  }, [user, getToken, refreshToken, handleAuthFailure]);
+  }, [user, company?.companyId, getToken, refreshToken, handleAuthFailure]);
 
   const fetchOperationalData = useCallback(async (cancelSignal?: AbortSignal) => {
     if (!user) return;

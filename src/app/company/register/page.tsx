@@ -80,7 +80,10 @@ export default function CompanyRegisterPage() {
       router.replace("/dashboard");
     } catch (err) {
       console.error("[company-register]", err);
-      setError("Could not register your company. Check your connection and try again.");
+      const detail = process.env.NODE_ENV === "development" && err instanceof Error
+        ? ` (${err.message})`
+        : "";
+      setError(`Could not register your company. Check your connection and try again.${detail}`);
     } finally {
       setSaving(false);
     }

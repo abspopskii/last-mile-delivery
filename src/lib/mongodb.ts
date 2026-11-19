@@ -9,10 +9,12 @@
  * Indexes: ensured on first getDb() call via mongodb-indexes.ts
  */
 
+import { setServers } from "node:dns";
+import { isIP } from "node:net";
 import { MongoClient, type Db } from "mongodb";
 import { ensureIndexes } from "@/lib/mongodb-indexes";
 import { ensureWorkforceIndexes } from "@/lib/workforce-indexes";
-import { MONGODB_URI } from "@/lib/env";
+import { MONGODB_DNS_SERVERS, MONGODB_URI } from "@/lib/env";
 import { agentLog } from "@/lib/debug-agent-log";
 
 
@@ -26,6 +28,18 @@ declare global {
 }
 
 function createClientPromise(): Promise<MongoClient> {
+  const configuredDnsServers = MONGODB_DNS_SERVERS();
+  if (configuredDnsServers) {
+    const dnsServers = configuredDnsServers.split(",").map((server) => server.trim());
+    if (dnsServers.some((server) => isIP(server) === 0)) {
+      throw new Error(
+        "[mongodb] MONGODB_DNS_SERVERS must be a comma-separated list of IP addresses."
+      );
+    }
+    setServers(dnsServers);
+    console.log(`[mongodb] Using ${dnsServers.length} configured DNS resolver(s) for SRV lookup`);
+  }
+
   // Read and validate URI lazily — only when the first connection is needed,
   // not at module evaluation time. This lets the dev server start without
   // MONGODB_URI set, and fails fast at the first actual DB call instead.
@@ -59,15 +73,16 @@ function createClientPromise(): Promise<MongoClient> {
  * load time — so the dev server starts cleanly without MONGODB_URI set.
  */
 function getClientPromise(): Promise<MongoClient> {
-  if (process.env.NODE_ENV === "development") {
-    global._mongoClientPromise ??= createClientPromise();
-    return global._mongoClientPromise;
-  }
-  // Production: create once per module (module is evaluated once per process)
-  if (!global._mongoClientPromise) {
-    global._mongoClientPromise = createClientPromise();
-  }
-  return global._mongoClientPromise;
+  if (global._mongoClientPromise) return global._mongoClientPromise;
+
+  const clientPromise = createClientPromise();
+  global._mongoClientPromise = clientPromise;
+  void clientPromise.catch(() => {
+    if (global._mongoClientPromise === clientPromise) {
+      global._mongoClientPromise = undefined;
+    }
+  });
+  return clientPromise;
 }
 
 /**

@@ -35,7 +35,7 @@ import { resolve } from "path";
 import { MongoClient } from "mongodb";
 
 // Load .env.local from the project root (same directory as package.json).
-// tsx runs from the sentinelroute-app directory, so resolve relative to cwd.
+// tsx runs from the SentinelRoute-app directory, so resolve relative to cwd.
 config({ path: resolve(process.cwd(), ".env.local") });
 
 const ACTIVE_STATUSES = ["draft", "pending", "assigned", "active", "at-risk"] as const;
@@ -49,7 +49,7 @@ async function main(): Promise<void> {
 
   const client = new MongoClient(uri);
   await client.connect();
-  const db = client.db("sentinelroute");
+  const db = client.db("SentinelRoute");
   const col = db.collection("shipments");
 
   console.log("[check-assignment-duplicates] Checking for duplicate driver assignments...");

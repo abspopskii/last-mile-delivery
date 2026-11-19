@@ -19,8 +19,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/sentinelroute.git
-cd sentinelroute
+git clone https://github.com/your-username/SentinelRoute.git
+cd SentinelRoute
 
 # Install dependencies
 npm install

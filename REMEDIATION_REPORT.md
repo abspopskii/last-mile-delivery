@@ -126,7 +126,7 @@ npx tsx scripts/check-assignment-duplicates.ts
 ### Step 1 — Run pre-deployment migration check (populated databases only)
 
 ```bash
-cd sentinelroute-app
+cd SentinelRoute-app
 MONGODB_URI="<your-production-uri>" npx tsx scripts/check-assignment-duplicates.ts
 ```
 
