@@ -16,7 +16,7 @@ import { auth } from "@/lib/firebase";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-// ─── SentinelRoute design tokens ─────────────────────────────────────────────
+// ─── Last-Mile Delivery design tokens ─────────────────────────────────────────────
 const AMBER_GLOW = "0 0 0 1px rgba(245,158,11,0.15), 0 4px 20px rgba(245,158,11,0.20)";
 const AMBER_FOCUS = "0 0 0 2px rgba(245,158,11,0.35)";
 
@@ -35,7 +35,7 @@ const PROOF_CARDS = [
   {
     tag: "Explainability",
     title: "Explainable routing",
-    body: "SentinelRoute shows the reasoning behind each recommendation. Every route option comes with a justification, not just a result.",
+    body: "Last-Mile Delivery shows the reasoning behind each recommendation. Every route option comes with a justification, not just a result.",
   },
   {
     tag: "Auditability",
@@ -308,7 +308,7 @@ function SignInForm() {
               <Route className="w-4 h-4 text-amber-500" />
             </div>
             <div className="flex flex-col">
-              <span className="font-bold text-[#F1F3F5] tracking-tight text-sm leading-tight">SentinelRoute</span>
+              <span className="font-bold text-[#F1F3F5] tracking-tight text-sm leading-tight">Last-Mile Delivery</span>
               <span className="text-[9px] font-semibold text-amber-500 uppercase tracking-widest leading-none">Intelligence</span>
             </div>
           </Link>
@@ -326,7 +326,7 @@ function SignInForm() {
 
         {/* Bottom wordmark */}
         <p className="text-[10px] text-slate-600 font-mono mt-8">
-          © 2026 SentinelRoute Intelligence
+          © 2026 Last-Mile Delivery Intelligence
         </p>
       </div>
 
@@ -344,7 +344,7 @@ function SignInForm() {
               <Route className="w-4 h-4 text-amber-500" />
             </div>
             <div className="flex flex-col">
-              <span className="font-bold text-[#F1F3F5] tracking-tight text-sm leading-tight">SentinelRoute</span>
+              <span className="font-bold text-[#F1F3F5] tracking-tight text-sm leading-tight">Last-Mile Delivery</span>
               <span className="text-[9px] font-semibold text-amber-500 uppercase tracking-widest leading-none">Intelligence</span>
             </div>
           </Link>

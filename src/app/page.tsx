@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * SentinelRoute - Industrial Logistics Decision Intelligence
+ * Last-Mile Delivery - Industrial Logistics Decision Intelligence
  * Restored Landing Page with Design System Alignment
  */
 import { useState, useEffect, useRef } from "react";
@@ -65,7 +65,7 @@ function Navbar() {
           </div>
           <div className="flex flex-col">
             <span className="font-bold text-foreground tracking-tight text-sm leading-tight">
-              SentinelRoute
+              Last-Mile Delivery
             </span>
             <span className="text-[9px] font-semibold text-amber-500 uppercase tracking-widest leading-none">
               Intelligence
@@ -200,7 +200,7 @@ const howSteps = [
     step: "03",
     num: 3,
     label: "Formalize the Decision",
-    desc: "Select your route. The SentinelRoute Shipment Pass locks in your operational choice with immutable risk scoring and rationale context.",
+    desc: "Select your route. The Last-Mile Delivery Shipment Pass locks in your operational choice with immutable risk scoring and rationale context.",
   },
   {
     step: "04",
@@ -326,7 +326,7 @@ export default function HomePage() {
               custom={2}
               className="max-w-lg text-[0.9375rem] text-slate-400 leading-relaxed"
             >
-              SentinelRoute evaluates available routes against traffic, weather,
+              Last-Mile Delivery evaluates available routes against traffic, weather,
               disruption signals, and operational risk - so teams can compare
               trade-offs and dispatch with confidence.
             </motion.p>
@@ -551,7 +551,7 @@ export default function HomePage() {
                 <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0">
                   <Route className="w-4 h-4 text-amber-500" />
                 </div>
-                <span className="font-bold text-foreground tracking-tight text-sm">SentinelRoute</span>
+                <span className="font-bold text-foreground tracking-tight text-sm">Last-Mile Delivery</span>
               </Link>
               <p className="text-slate-400 leading-relaxed max-w-[200px]">
                 Logistics decision intelligence for operations teams.
@@ -591,7 +591,7 @@ export default function HomePage() {
 
           {/* Bottom bar */}
           <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-[#202A33]/60 text-xs text-slate-500">
-            <p className="font-mono">© 2026 SentinelRoute. All rights reserved.</p>
+            <p className="font-mono">© 2026 Last-Mile Delivery. All rights reserved.</p>
             <div className="flex items-center gap-5">
               {/* Twitter / X */}
               <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="hover:text-slate-300 transition-colors" aria-label="Twitter">
